@@ -17,8 +17,8 @@ PROGRAM aoc23day2a
   CHARACTER(LEN=:), ALLOCATABLE :: ifile, logfile
   CHARACTER(LEN=line_maxlen) :: line
   CHARACTER(LEN=CEILING(LOG10(REAL(line_maxlen)))+3) :: fmt
-
-  INTEGER :: eol, eof, u, l, tot
+  INTEGER :: u, l, eol, eof, cur_id, cur_power, tot_valid, tot_power
+  LOGICAL :: valid
 
   CALL get_inputfile(ifile)
   !PRINT *, 'Reading input from ', ifile
@@ -37,13 +37,17 @@ PROGRAM aoc23day2a
 
   eof = 0
   eol = 0
-  tot = 0
+  tot_valid = 0
+  tot_power = 0
   fileloop: DO
     READ(u, fmt, IOSTAT=eol) line
     IF (eof /= 0 .OR. eol /= 0) EXIT fileloop
-    tot = tot + parse_game(line)
+    CALL parse_game(line, cur_id, cur_power)
+    tot_valid = tot_valid + cur_id
+    tot_power = tot_power + cur_power
   END DO fileloop
-  PRINT *, tot
+  PRINT *, 'a', tot_valid
+  PRINT *, 'b', tot_power
 
   CLOSE(u)
   CLOSE(l)
@@ -95,23 +99,25 @@ CONTAINS
     RETURN
   END SUBROUTINE get_inputfile
 
-  FUNCTION parse_game(line) RESULT(game_id)
+  SUBROUTINE parse_game(line, game_id, game_power)
     USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: e => ERROR_UNIT
     IMPLICIT NONE
 
     INTRINSIC :: LEN, SCAN, SIZE, COUNT, PACK
 
     CHARACTER(LEN=line_maxlen), INTENT(IN) :: line
-    INTEGER :: game_id, line_len
+    INTEGER, INTENT(OUT) :: game_id, game_power
 
+    INTEGER :: line_len
     INTEGER :: c, i, j, ncubes, curi, curf, game_nrounds, round_ncolors
-    INTEGER :: current_round(ncolors), cur_color(ncolors)
+    INTEGER :: current_round(ncolors), cur_color(ncolors), cur_mincubes(ncolors)
     INTEGER :: pos_colon
     INTEGER, ALLOCATABLE :: pos_semicolons(:), pos_commas(:)
     CHARACTER(LEN=color_strlen) :: colornames(ncolors)
     CHARACTER(LEN=MIN(5, color_strlen)) :: word
     CHARACTER(LEN=1), ALLOCATABLE :: strarr(:)
-    CHARACTER(LEN=:), ALLOCATABLE :: line_trim, game_str, round_str, color_str
+    CHARACTER(LEN=:), ALLOCATABLE :: line_trim, game_str, round_str, color_str, valid_str
+    LOGICAL :: valid
 
     colornames = colors(:)%name
     line_trim = TRIM(line)
@@ -126,6 +132,8 @@ CONTAINS
     game_nrounds = SIZE(pos_semicolons) - 1
     !WRITE(e,*) 'game id ', game_id, ': ', game_nrounds, ' rounds'
 
+    valid = .TRUE.
+    cur_mincubes(:) = 0
     DO i = 1, game_nrounds
       curi = pos_semicolons(i)
       curf = pos_semicolons(i+1)
@@ -141,16 +149,25 @@ CONTAINS
         READ(color_str, *) ncubes, word
         cur_color = PACK([(c, c = 1, ncolors)], [(colornames(c), c = 1, ncolors)] == word(1:color_strlen))
         IF (ncubes > colors(cur_color(1))%limit) THEN
-          WRITE(l,*) 'Game ', game_id, ' limit break: ', colors(cur_color(1))%name, ' ', ncubes, ' > ', colors(cur_color(1))%limit
-          game_id = 0
-          RETURN
+          valid = .FALSE.
+        END IF
+        IF (ncubes > cur_mincubes(cur_color(1))) THEN
+          cur_mincubes(cur_color(1)) = ncubes
         END IF
       END DO ! j
     END DO ! i
 
-    IF (game_id /= 0) WRITE(l,*) 'Game ', game_id, ' OK'
+    IF (valid) THEN
+      valid_str = 'valid'
+    ELSE
+      valid_str = 'invalid'
+    END IF
+    WRITE(l,*) 'Game ', game_id, ' is ', valid_str, ', mincubes = ', (cur_mincubes(c), ' ', colornames(c), ' ', c = 1, ncolors)
+
+    IF (.NOT. valid) game_id = 0
+    game_power = PRODUCT(cur_mincubes)  
 
     RETURN
-  END FUNCTION parse_game
+  END SUBROUTINE parse_game
 
 END PROGRAM aoc23day2a
