@@ -1,0 +1,6 @@
+# Binaries
+*.o
+*.x
+
+# Log files
+*.log
